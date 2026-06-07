@@ -1,7 +1,9 @@
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Crown, Gift, Percent, Clock, Heart, Headphones, Cake, ChevronRight, Zap } from 'lucide-react';
+import { ArrowLeft, Crown, Gift, Percent, Clock, Heart, Headphones, Cake, ChevronRight, Zap, Loader2, AlertCircle } from 'lucide-react';
 import { useAppStore } from '@/store';
-import { mockMemberBenefits } from '@/data/mock';
+import { api } from '@/api/client';
+import type { MemberBenefit } from '@/types';
 
 const levelConfig = {
   normal: { name: '普通会员', minSpending: 0, color: 'from-gray-400 to-gray-500', nextLevel: 'silver' },
@@ -23,26 +25,80 @@ const iconMap: Record<string, any> = {
 export default function Membership() {
   const navigate = useNavigate();
   const { user } = useAppStore();
+  const [benefits, setBenefits] = useState<MemberBenefit[]>([]);
+  const [progress, setProgress] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   const currentLevel = user?.level || 'normal';
   const config = levelConfig[currentLevel as keyof typeof levelConfig];
   const nextConfig = config.nextLevel ? levelConfig[config.nextLevel as keyof typeof levelConfig] : null;
-  
-  const progress = nextConfig 
-    ? Math.min(100, ((user?.annualSpending || 0) / nextConfig.minSpending) * 100)
+
+  useEffect(() => {
+    const loadData = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+        const [benefitsRes, progressRes] = await Promise.all([
+          api.membership.getBenefits(),
+          api.membership.getProgress().catch(() => null)
+        ]);
+        setBenefits(benefitsRes.benefits || benefitsRes.data || []);
+        setProgress(progressRes?.progress || progressRes?.data || null);
+      } catch (e: any) {
+        setError(e.message || '加载数据失败');
+      } finally {
+        setLoading(false);
+      }
+    };
+    loadData();
+  }, []);
+
+  const annualSpending = progress?.annualSpending ?? user?.annualSpending ?? 0;
+  const progressPercent = nextConfig 
+    ? Math.min(100, (annualSpending / nextConfig.minSpending) * 100)
     : 100;
 
   const benefitsByLevel = {
-    normal: mockMemberBenefits.filter(b => b.level === 'normal'),
-    silver: mockMemberBenefits.filter(b => b.level === 'silver'),
-    gold: mockMemberBenefits.filter(b => b.level === 'gold'),
-    diamond: mockMemberBenefits.filter(b => b.level === 'diamond'),
+    normal: benefits.filter(b => b.level === 'normal'),
+    silver: benefits.filter(b => b.level === 'silver'),
+    gold: benefits.filter(b => b.level === 'gold'),
+    diamond: benefits.filter(b => b.level === 'diamond'),
   };
 
   const unlockedLevels = ['normal'];
   if (currentLevel === 'silver' || currentLevel === 'gold' || currentLevel === 'diamond') unlockedLevels.push('silver');
   if (currentLevel === 'gold' || currentLevel === 'diamond') unlockedLevels.push('gold');
   if (currentLevel === 'diamond') unlockedLevels.push('diamond');
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="flex flex-col items-center gap-3">
+          <Loader2 className="w-8 h-8 text-primary-500 animate-spin" />
+          <p className="text-gray-500 text-sm">加载中...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+        <div className="text-center">
+          <AlertCircle className="w-12 h-12 text-red-500 mx-auto mb-3" />
+          <p className="text-gray-800 font-medium mb-2">加载失败</p>
+          <p className="text-gray-500 text-sm mb-4">{error}</p>
+          <button
+            onClick={() => window.location.reload()}
+            className="btn-primary text-sm"
+          >
+            重试
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -68,16 +124,16 @@ export default function Membership() {
           <div className="mt-6">
             <div className="flex justify-between text-sm mb-2">
               <span>距离{nextConfig.name}</span>
-              <span>¥{user?.annualSpending} / ¥{nextConfig.minSpending}</span>
+              <span>¥{annualSpending} / ¥{nextConfig.minSpending}</span>
             </div>
             <div className="h-2 bg-white/20 rounded-full overflow-hidden">
               <div
                 className="h-full bg-white rounded-full transition-all duration-500"
-                style={{ width: `${progress}%` }}
+                style={{ width: `${progressPercent}%` }}
               />
             </div>
             <p className="text-xs mt-2 opacity-90">
-              再消费 ¥{Math.max(0, nextConfig.minSpending - (user?.annualSpending || 0))} 即可升级
+              再消费 ¥{Math.max(0, nextConfig.minSpending - annualSpending)} 即可升级
             </p>
           </div>
         )}

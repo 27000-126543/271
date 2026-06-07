@@ -1,10 +1,16 @@
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ChevronRight, Settings, Heart, Shield, Gift, ShoppingBag, FileText, BarChart3 } from 'lucide-react';
+import { ChevronRight, Settings, Heart, Shield, Gift, ShoppingBag, FileText, BarChart3, Loader2, AlertCircle } from 'lucide-react';
 import { useAppStore } from '@/store';
+import { api } from '@/api/client';
 
 export default function Profile() {
   const navigate = useNavigate();
   const { user, pets } = useAppStore();
+  const [orderCount, setOrderCount] = useState(0);
+  const [couponCount, setCouponCount] = useState(3);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   const levelNames: Record<string, string> = {
     normal: '普通会员',
@@ -28,6 +34,56 @@ export default function Profile() {
     { icon: FileText, label: '服务记录', path: '/services' },
     { icon: BarChart3, label: '管理后台', path: '/admin' },
   ];
+
+  useEffect(() => {
+    const loadStats = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+        const [mallOrders, serviceOrders] = await Promise.all([
+          api.mall.getOrders().catch(() => ({ orders: [] })),
+          api.services.getOrders().catch(() => ({ orders: [] }))
+        ]);
+        const mallCount = mallOrders.orders?.length || mallOrders.data?.length || 0;
+        const serviceCount = serviceOrders.orders?.length || serviceOrders.data?.length || 0;
+        setOrderCount(mallCount + serviceCount);
+      } catch (e: any) {
+        setError(e.message || '加载数据失败');
+      } finally {
+        setLoading(false);
+      }
+    };
+    loadStats();
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="flex flex-col items-center gap-3">
+          <Loader2 className="w-8 h-8 text-primary-500 animate-spin" />
+          <p className="text-gray-500 text-sm">加载中...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen flex items-center justify-center p-4">
+        <div className="text-center">
+          <AlertCircle className="w-12 h-12 text-red-500 mx-auto mb-3" />
+          <p className="text-gray-800 font-medium mb-2">加载失败</p>
+          <p className="text-gray-500 text-sm mb-4">{error}</p>
+          <button
+            onClick={() => window.location.reload()}
+            className="btn-primary text-sm"
+          >
+            重试
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen">
@@ -63,7 +119,7 @@ export default function Profile() {
               <p className="text-xs text-gray-500 mt-1">宠物</p>
             </div>
             <div>
-              <p className="text-xl font-bold text-gray-800">12</p>
+              <p className="text-xl font-bold text-gray-800">{orderCount}</p>
               <p className="text-xs text-gray-500 mt-1">订单</p>
             </div>
             <div>
@@ -71,7 +127,7 @@ export default function Profile() {
               <p className="text-xs text-gray-500 mt-1">积分</p>
             </div>
             <div>
-              <p className="text-xl font-bold text-gray-800">3</p>
+              <p className="text-xl font-bold text-gray-800">{couponCount}</p>
               <p className="text-xs text-gray-500 mt-1">优惠券</p>
             </div>
           </div>

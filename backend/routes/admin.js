@@ -11,33 +11,27 @@ router.get('/stats', async (req, res) => {
     const { city = 'all', timeRange = '6m' } = req.query;
 
     const timeConditions = getTimeCondition(timeRange);
-    const cityCondition = city !== 'all' ? ` AND city = '${city}'` : '';
 
-    const totalOrders = await get(
-      `SELECT COUNT(*) as count FROM service_orders WHERE created_at >= ? ${cityCondition.replace('city', 'sp.city').replace('sp.', '')}`,
-      [timeConditions.startDate]
-    );
+    const serviceOrders = await all(`SELECT * FROM service_orders`);
+    const mallOrders = await all(`SELECT * FROM orders`);
+    const claims = await all(`SELECT * FROM insurance_claims`);
 
-    const totalSalesData = await get(
-      `SELECT COALESCE(SUM(price), 0) as total FROM service_orders WHERE created_at >= ?`,
-      [timeConditions.startDate]
+    const filteredServiceOrders = serviceOrders.filter(o => 
+      new Date(o.created_at) >= new Date(timeConditions.startDate)
     );
-    const mallSalesData = await get(
-      `SELECT COALESCE(SUM(total_price), 0) as total FROM orders WHERE created_at >= ?`,
-      [timeConditions.startDate]
+    const filteredMallOrders = mallOrders.filter(o => 
+      new Date(o.created_at) >= new Date(timeConditions.startDate)
     );
-    const totalSales = (totalSalesData?.total || 0) + (mallSalesData?.total || 0);
-
-    const totalClaims = await get(
-      `SELECT COUNT(*) as count FROM insurance_claims WHERE created_at >= ?`,
-      [timeConditions.startDate]
+    const filteredClaims = claims.filter(c => 
+      new Date(c.created_at) >= new Date(timeConditions.startDate)
     );
 
-    const claimRateData = await get(
-      `SELECT COUNT(*) as total, SUM(CASE WHEN status IN ('approved', 'reviewing') THEN 1 ELSE 0 END) as valid FROM insurance_claims WHERE created_at >= ?`,
-      [timeConditions.startDate]
-    );
-    const claimRate = claimRateData.total > 0 ? Math.round((claimRateData.valid / claimRateData.total) * 1000) / 10 : 0;
+    const totalOrders = filteredServiceOrders.length + filteredMallOrders.length;
+    const totalSales = filteredServiceOrders.reduce((sum, o) => sum + (o.price || 0), 0) + 
+                       filteredMallOrders.reduce((sum, o) => sum + (o.total_price || 0), 0);
+    const totalClaims = filteredClaims.length;
+    const validClaims = filteredClaims.filter(c => ['approved', 'reviewing'].includes(c.status)).length;
+    const claimRate = filteredClaims.length > 0 ? Math.round((validClaims / filteredClaims.length) * 1000) / 10 : 0;
 
     const eventParticipationRate = 68.5;
     const memberActivity = 75.2;
@@ -67,9 +61,9 @@ router.get('/stats', async (req, res) => {
     ];
 
     res.json({
-      totalOrders: totalOrders?.count || 0,
+      totalOrders,
       totalSales,
-      totalClaims: totalClaims?.count || 0,
+      totalClaims,
       eventParticipationRate,
       memberActivity,
       orderTrend,

@@ -1,9 +1,9 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Shield, FileText, Clock, CheckCircle, XCircle, Upload } from 'lucide-react';
-import { mockInsurancePlans, mockClaims } from '@/data/mock';
+import { ArrowLeft, Shield, FileText, Clock, CheckCircle, XCircle, Upload, Loader2, AlertCircle } from 'lucide-react';
+import { api } from '@/api/client';
 import { useAppStore } from '@/store';
-import type { InsuranceClaim } from '@/types';
+import type { InsurancePlan, InsuranceClaim } from '@/types';
 
 const statusText: Record<string, string> = {
   pending: '待审核',
@@ -21,33 +21,84 @@ const statusColor: Record<string, string> = {
 
 export default function Insurance() {
   const navigate = useNavigate();
-  const { addClaim } = useAppStore();
   const [activeTab, setActiveTab] = useState<'plans' | 'claims'>('plans');
   const [showClaimForm, setShowClaimForm] = useState(false);
+  const [plans, setPlans] = useState<InsurancePlan[]>([]);
+  const [claims, setClaims] = useState<InsuranceClaim[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [claimForm, setClaimForm] = useState({
     petId: '1',
     description: '',
     amount: '',
   });
 
-  const handleSubmitClaim = () => {
-    const newClaim: InsuranceClaim = {
-      id: Date.now().toString(),
-      userId: '1',
-      petId: claimForm.petId,
-      planId: 'i1',
-      planName: '萌宠意外险',
-      status: 'pending',
-      amount: parseFloat(claimForm.amount) || 0,
-      description: claimForm.description,
-      images: ['https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=medical%20document&image_size=square'],
-      createTime: new Date().toISOString().split('T')[0],
+  useEffect(() => {
+    const loadData = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+        if (activeTab === 'plans') {
+          const res = await api.insurance.getPlans();
+          setPlans(res.plans || res.data || []);
+        } else {
+          const res = await api.insurance.getClaims().catch(() => ({ claims: [] }));
+          setClaims(res.claims || res.data || []);
+        }
+      } catch (e: any) {
+        setError(e.message || '加载数据失败');
+      } finally {
+        setLoading(false);
+      }
     };
-    addClaim(newClaim);
-    setShowClaimForm(false);
-    setClaimForm({ petId: '1', description: '', amount: '' });
-    alert('理赔申请已提交，系统将自动初审');
+    loadData();
+  }, [activeTab]);
+
+  const handleSubmitClaim = async () => {
+    try {
+      await api.insurance.createClaim({
+        petId: claimForm.petId,
+        description: claimForm.description,
+        amount: parseFloat(claimForm.amount) || 0,
+      });
+      setShowClaimForm(false);
+      setClaimForm({ petId: '1', description: '', amount: '' });
+      alert('理赔申请已提交，系统将自动初审');
+      const res = await api.insurance.getClaims().catch(() => ({ claims: [] }));
+      setClaims(res.claims || res.data || []);
+    } catch (e: any) {
+      alert(e.message || '提交失败');
+    }
   };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="flex flex-col items-center gap-3">
+          <Loader2 className="w-8 h-8 text-primary-500 animate-spin" />
+          <p className="text-gray-500 text-sm">加载中...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+        <div className="text-center">
+          <AlertCircle className="w-12 h-12 text-red-500 mx-auto mb-3" />
+          <p className="text-gray-800 font-medium mb-2">加载失败</p>
+          <p className="text-gray-500 text-sm mb-4">{error}</p>
+          <button
+            onClick={() => window.location.reload()}
+            className="btn-primary text-sm"
+          >
+            重试
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -95,7 +146,7 @@ export default function Insurance() {
 
       {activeTab === 'plans' ? (
         <div className="p-4 space-y-4 pb-8">
-          {mockInsurancePlans.map(plan => (
+          {plans.map(plan => (
             <div key={plan.id} className="card p-4">
               <div className="flex justify-between items-start">
                 <div>
@@ -135,7 +186,7 @@ export default function Insurance() {
           </button>
           
           <div className="space-y-4">
-            {mockClaims.map(claim => (
+            {claims.map(claim => (
               <div key={claim.id} className="card p-4">
                 <div className="flex justify-between items-start">
                   <div>

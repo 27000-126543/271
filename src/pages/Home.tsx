@@ -1,15 +1,36 @@
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Bell, Search, Calendar, Syringe, Heart, ShoppingBag, Users } from 'lucide-react';
 import { useAppStore } from '@/store';
-import { mockVaccinePlans, mockEvents } from '@/data/mock';
+import { api } from '@/api/client';
 import dayjs from 'dayjs';
 
 export default function Home() {
   const navigate = useNavigate();
-  const { user, pets } = useAppStore();
-  const currentPet = pets[0];
-  const upcomingPlans = mockVaccinePlans.filter(p => p.status === 'pending').slice(0, 3);
-  const nearbyEvents = mockEvents.slice(0, 2);
+  const { user, pets, loadPets } = useAppStore();
+  const [vaccinePlans, setVaccinePlans] = useState<any[]>([]);
+  const [events, setEvents] = useState<any[]>([]);
+
+  useEffect(() => {
+    loadPets();
+    loadData();
+  }, []);
+
+  const loadData = async () => {
+    try {
+      const [plansRes, eventsRes] = await Promise.all([
+        api.services.getVaccinePlans().catch(() => ({ plans: [] })),
+        api.social.getEvents().catch(() => ({ events: [] })),
+      ]);
+      setVaccinePlans(plansRes.plans || []);
+      setEvents(eventsRes.events || []);
+    } catch (e) {
+      console.error('加载首页数据失败:', e);
+    }
+  };
+
+  const upcomingPlans = vaccinePlans.filter(p => p.status === 'pending').slice(0, 3);
+  const nearbyEvents = events.slice(0, 2);
 
   const quickActions = [
     { icon: Syringe, label: '疫苗提醒', color: 'bg-pet-blue', path: '/profile' },
@@ -17,6 +38,16 @@ export default function Home() {
     { icon: ShoppingBag, label: '宠物商城', color: 'bg-pet-orange', path: '/mall' },
     { icon: Users, label: '宠物社交', color: 'bg-pet-pink', path: '/social' },
   ];
+
+  const getLevelText = (level: string) => {
+    const levelMap: Record<string, string> = {
+      normal: '普通',
+      silver: '银卡',
+      gold: '金卡',
+      diamond: '钻石',
+    };
+    return levelMap[level] || '普通';
+  };
 
   return (
     <div className="min-h-screen">
@@ -65,23 +96,27 @@ export default function Home() {
               + 添加
             </button>
           </div>
-          <div className="flex gap-4 overflow-x-auto pb-2">
-            {pets.map(pet => (
-              <div
-                key={pet.id}
-                onClick={() => navigate(`/profile/pet/${pet.id}`)}
-                className="flex-shrink-0 flex flex-col items-center cursor-pointer"
-              >
-                <img
-                  src={pet.avatar}
-                  alt={pet.name}
-                  className="w-16 h-16 rounded-full object-cover border-2 border-primary-100"
-                />
-                <span className="text-sm mt-2 text-gray-700">{pet.name}</span>
-                <span className="text-xs text-gray-400">{pet.breed}</span>
-              </div>
-            ))}
-          </div>
+          {pets.length > 0 ? (
+            <div className="flex gap-4 overflow-x-auto pb-2">
+              {pets.map(pet => (
+                <div
+                  key={pet.id}
+                  onClick={() => navigate(`/profile/pet/${pet.id}`)}
+                  className="flex-shrink-0 flex flex-col items-center cursor-pointer"
+                >
+                  <img
+                    src={pet.avatar}
+                    alt={pet.name}
+                    className="w-16 h-16 rounded-full object-cover border-2 border-primary-100"
+                  />
+                  <span className="text-sm mt-2 text-gray-700">{pet.name}</span>
+                  <span className="text-xs text-gray-400">{pet.breed}</span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-center text-gray-400 py-4 text-sm">还没有添加宠物，点击右上角添加吧</p>
+          )}
         </div>
 
         {upcomingPlans.length > 0 && (
@@ -103,10 +138,13 @@ export default function Home() {
                     <div className="flex-1">
                       <p className="text-sm font-medium text-gray-800">{plan.name}</p>
                       <p className="text-xs text-gray-500">
-                        {pet?.name} · {dayjs(plan.recommendedDate).format('MM月DD日')}
+                        {pet?.name || '未知'} · {dayjs(plan.recommendedDate).format('MM月DD日')}
                       </p>
                     </div>
-                    <button className="text-xs bg-primary-500 text-white px-3 py-1.5 rounded-full">
+                    <button 
+                      onClick={() => navigate('/services')}
+                      className="text-xs bg-primary-500 text-white px-3 py-1.5 rounded-full"
+                    >
                       预约
                     </button>
                   </div>
@@ -116,45 +154,47 @@ export default function Home() {
           </div>
         )}
 
-        <div className="mt-6 card p-4 animate-slide-up">
-          <div className="flex justify-between items-center mb-4">
-            <h3 className="font-semibold text-gray-800">附近活动</h3>
-            <button
-              onClick={() => navigate('/social')}
-              className="text-primary-500 text-sm"
-            >
-              查看全部
-            </button>
-          </div>
-          <div className="space-y-4">
-            {nearbyEvents.map(event => (
-              <div
-                key={event.id}
-                onClick={() => navigate(`/social/event/${event.id}`)}
-                className="flex gap-3 cursor-pointer"
+        {nearbyEvents.length > 0 && (
+          <div className="mt-6 card p-4 animate-slide-up">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="font-semibold text-gray-800">附近活动</h3>
+              <button
+                onClick={() => navigate('/social')}
+                className="text-primary-500 text-sm"
               >
-                <img
-                  src={event.image}
-                  alt={event.title}
-                  className="w-20 h-20 rounded-lg object-cover flex-shrink-0"
-                />
-                <div className="flex-1">
-                  <h4 className="font-medium text-gray-800 text-sm">{event.title}</h4>
-                  <p className="text-xs text-gray-500 mt-1">
-                    {dayjs(event.date).format('MM月DD日 HH:mm')}
-                  </p>
-                  <p className="text-xs text-gray-500">{event.location}</p>
-                  <div className="flex items-center gap-2 mt-2">
-                    <span className="text-xs text-primary-500">
-                      {event.participants}/{event.maxParticipants}人报名
-                    </span>
-                    <span className="text-xs text-orange-500">+{event.pointsReward}积分</span>
+                查看全部
+              </button>
+            </div>
+            <div className="space-y-4">
+              {nearbyEvents.map(event => (
+                <div
+                  key={event.id}
+                  onClick={() => navigate(`/social/event/${event.id}`)}
+                  className="flex gap-3 cursor-pointer"
+                >
+                  <img
+                    src={event.image}
+                    alt={event.title}
+                    className="w-20 h-20 rounded-lg object-cover flex-shrink-0"
+                  />
+                  <div className="flex-1">
+                    <h4 className="font-medium text-gray-800 text-sm">{event.title}</h4>
+                    <p className="text-xs text-gray-500 mt-1">
+                      {dayjs(event.date).format('MM月DD日 HH:mm')}
+                    </p>
+                    <p className="text-xs text-gray-500">{event.location}</p>
+                    <div className="flex items-center gap-2 mt-2">
+                      <span className="text-xs text-primary-500">
+                        {event.participants}/{event.maxParticipants}人报名
+                      </span>
+                      <span className="text-xs text-orange-500">+{event.pointsReward}积分</span>
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
-        </div>
+        )}
 
         <div className="mt-6 mb-6 card p-4 animate-slide-up">
           <div className="flex items-center justify-between">
@@ -165,7 +205,7 @@ export default function Home() {
               <div>
                 <p className="font-semibold text-gray-800">会员中心</p>
                 <p className="text-xs text-gray-500">
-                  当前{user?.level === 'gold' ? '金卡' : user?.level}会员，享专属权益
+                  当前{getLevelText(user?.level || 'normal')}会员，享专属权益
                 </p>
               </div>
             </div>

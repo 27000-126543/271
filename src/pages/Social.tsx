@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Heart, MessageCircle, Share2, Plus, MapPin, Calendar, Users } from 'lucide-react';
-import { mockPosts, mockEvents } from '@/data/mock';
+import { Heart, MessageCircle, Share2, Plus, MapPin, Calendar, Users, Loader2, AlertCircle } from 'lucide-react';
+import { api } from '@/api/client';
+import type { Post, PetEvent } from '@/types';
 import dayjs from 'dayjs';
 import relativeTime from 'dayjs/plugin/relativeTime';
 import 'dayjs/locale/zh-cn';
@@ -12,20 +13,78 @@ dayjs.locale('zh-cn');
 export default function Social() {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<'feed' | 'events'>('feed');
-  const [posts, setPosts] = useState(mockPosts);
+  const [posts, setPosts] = useState<Post[]>([]);
+  const [events, setEvents] = useState<PetEvent[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  const handleLike = (postId: string) => {
-    setPosts(posts.map(p => {
-      if (p.id === postId) {
-        return {
-          ...p,
-          isLiked: !p.isLiked,
-          likes: p.isLiked ? p.likes - 1 : p.likes + 1
-        };
+  useEffect(() => {
+    const loadData = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+        if (activeTab === 'feed') {
+          const res = await api.social.getPosts();
+          setPosts(res.posts || res.data || []);
+        } else {
+          const res = await api.social.getEvents();
+          setEvents(res.events || res.data || []);
+        }
+      } catch (e: any) {
+        setError(e.message || '加载数据失败');
+      } finally {
+        setLoading(false);
       }
-      return p;
-    }));
+    };
+    loadData();
+  }, [activeTab]);
+
+  const handleLike = async (postId: string) => {
+    try {
+      await api.social.likePost(postId);
+      setPosts(posts.map(p => {
+        if (p.id === postId) {
+          return {
+            ...p,
+            isLiked: !p.isLiked,
+            likes: p.isLiked ? p.likes - 1 : p.likes + 1
+          };
+        }
+        return p;
+      }));
+    } catch (e) {
+      console.error('点赞失败:', e);
+    }
   };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="flex flex-col items-center gap-3">
+          <Loader2 className="w-8 h-8 text-primary-500 animate-spin" />
+          <p className="text-gray-500 text-sm">加载中...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen flex items-center justify-center p-4">
+        <div className="text-center">
+          <AlertCircle className="w-12 h-12 text-red-500 mx-auto mb-3" />
+          <p className="text-gray-800 font-medium mb-2">加载失败</p>
+          <p className="text-gray-500 text-sm mb-4">{error}</p>
+          <button
+            onClick={() => window.location.reload()}
+            className="btn-primary text-sm"
+          >
+            重试
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen">
@@ -112,7 +171,7 @@ export default function Social() {
         </div>
       ) : (
         <div className="p-4 space-y-4 pb-8">
-          {mockEvents.map(event => (
+          {events.map(event => (
             <div
               key={event.id}
               onClick={() => navigate(`/social/event/${event.id}`)}

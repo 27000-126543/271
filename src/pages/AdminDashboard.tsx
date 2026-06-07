@@ -1,24 +1,44 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   ArrowLeft, TrendingUp, ShoppingCart, Shield, Users, Activity,
-  Calendar, MapPin, Download, BarChart3, PieChart, Lightbulb
+  Calendar, MapPin, Download, BarChart3, PieChart, Lightbulb, Loader2, AlertCircle
 } from 'lucide-react';
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, BarChart, Bar, PieChart as RechartsPieChart, Pie, Cell, Legend
 } from 'recharts';
-import { mockDashboardStats } from '@/data/mock';
+import { api } from '@/api/client';
+import type { DashboardStats } from '@/types';
 
 const COLORS = ['#ee7712', '#4A90D9', '#5CB85C', '#FF6B9D', '#9B59B6'];
 
 export default function AdminDashboard() {
   const navigate = useNavigate();
-  const stats = mockDashboardStats;
+  const [stats, setStats] = useState<DashboardStats | null>(null);
   const [selectedCity, setSelectedCity] = useState('all');
   const [selectedTime, setSelectedTime] = useState('6m');
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const loadStats = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+        const res = await api.admin.getStats(selectedCity, selectedTime);
+        setStats(res.stats || res.data || null);
+      } catch (e: any) {
+        setError(e.message || '加载数据失败');
+      } finally {
+        setLoading(false);
+      }
+    };
+    loadStats();
+  }, [selectedCity, selectedTime]);
 
   const exportReport = () => {
+    if (!stats) return;
     const report = {
       month: '2026年6月',
       totalRevenue: stats.totalSales,
@@ -36,6 +56,43 @@ export default function AdminDashboard() {
     URL.revokeObjectURL(url);
     alert('报表已导出！');
   };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-100 flex items-center justify-center">
+        <div className="flex flex-col items-center gap-3">
+          <Loader2 className="w-8 h-8 text-primary-500 animate-spin" />
+          <p className="text-gray-500 text-sm">加载中...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen bg-gray-100 flex items-center justify-center p-4">
+        <div className="text-center">
+          <AlertCircle className="w-12 h-12 text-red-500 mx-auto mb-3" />
+          <p className="text-gray-800 font-medium mb-2">加载失败</p>
+          <p className="text-gray-500 text-sm mb-4">{error}</p>
+          <button
+            onClick={() => window.location.reload()}
+            className="btn-primary text-sm"
+          >
+            重试
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (!stats) {
+    return (
+      <div className="min-h-screen bg-gray-100 flex items-center justify-center">
+        <p className="text-gray-500">暂无数据</p>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-100">

@@ -1,12 +1,13 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Camera } from 'lucide-react';
+import { ArrowLeft, Camera, Loader2 } from 'lucide-react';
 import { useAppStore } from '@/store';
-import type { Pet } from '@/types';
+import { api } from '@/api/client';
 
 export default function AddPet() {
   const navigate = useNavigate();
   const { addPet } = useAppStore();
+  const [submitting, setSubmitting] = useState(false);
   const [form, setForm] = useState({
     name: '',
     type: 'dog' as 'dog' | 'cat' | 'other',
@@ -17,23 +18,26 @@ export default function AddPet() {
     personality: '',
   });
 
-  const handleSubmit = () => {
-    const newPet: Pet = {
-      id: Date.now().toString(),
-      userId: '1',
-      name: form.name,
-      type: form.type,
-      breed: form.breed,
-      age: parseInt(form.age) || 0,
-      gender: form.gender,
-      weight: parseFloat(form.weight) || 0,
-      personality: form.personality,
-      avatar: `https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=cute%20${form.type}%20pet%20portrait&image_size=square`,
-      vaccineRecords: [],
-      medicalHistory: [],
-    };
-    addPet(newPet);
-    navigate(-1);
+  const handleSubmit = async () => {
+    try {
+      setSubmitting(true);
+      const petData = {
+        name: form.name,
+        type: form.type,
+        breed: form.breed,
+        age: parseInt(form.age) || 0,
+        gender: form.gender,
+        weight: parseFloat(form.weight) || 0,
+        personality: form.personality,
+        avatar: `https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=cute%20${form.type}%20pet%20portrait&image_size=square`,
+      };
+      await api.pets.create(petData);
+      navigate(-1);
+    } catch (e: any) {
+      alert(e.message || '保存失败');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -168,10 +172,11 @@ export default function AddPet() {
 
         <button
           onClick={handleSubmit}
-          disabled={!form.name || !form.breed}
-          className="w-full mt-6 btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
+          disabled={!form.name || !form.breed || submitting}
+          className="w-full mt-6 btn-primary disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
         >
-          保存档案
+          {submitting && <Loader2 className="w-4 h-4 animate-spin" />}
+          {submitting ? '保存中...' : '保存档案'}
         </button>
       </div>
     </div>

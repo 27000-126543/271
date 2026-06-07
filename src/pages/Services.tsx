@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Search, MapPin, Star, Clock, Scissors, Home, Camera, GraduationCap, Bath } from 'lucide-react';
-import { mockServiceProviders, mockServiceOrders } from '@/data/mock';
+import { Search, MapPin, Star, Clock, Scissors, Home, Camera, GraduationCap, Bath, Loader2, AlertCircle } from 'lucide-react';
+import { api } from '@/api/client';
+import type { ServiceProvider, ServiceOrder } from '@/types';
 
 const serviceCategories = [
   { id: 'bath', icon: Bath, label: '洗澡美容', color: 'bg-pet-blue' },
@@ -26,8 +27,32 @@ export default function Services() {
   const navigate = useNavigate();
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
   const [searchText, setSearchText] = useState('');
+  const [providers, setProviders] = useState<ServiceProvider[]>([]);
+  const [orders, setOrders] = useState<ServiceOrder[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  const filteredProviders = mockServiceProviders.filter(p => {
+  useEffect(() => {
+    const loadData = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+        const [providersRes, ordersRes] = await Promise.all([
+          api.services.getProviders(),
+          api.services.getOrders().catch(() => ({ orders: [] }))
+        ]);
+        setProviders(providersRes.providers || providersRes.data || []);
+        setOrders(ordersRes.orders || ordersRes.data || []);
+      } catch (e: any) {
+        setError(e.message || '加载数据失败');
+      } finally {
+        setLoading(false);
+      }
+    };
+    loadData();
+  }, []);
+
+  const filteredProviders = providers.filter(p => {
     if (searchText && !p.name.includes(searchText)) return false;
     return true;
   });
@@ -37,6 +62,35 @@ export default function Services() {
     const scoreB = b.rating * 100 - b.distance * 10 - (b.busyLevel === 'high' ? 20 : b.busyLevel === 'medium' ? 10 : 0);
     return scoreB - scoreA;
   });
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="flex flex-col items-center gap-3">
+          <Loader2 className="w-8 h-8 text-primary-500 animate-spin" />
+          <p className="text-gray-500 text-sm">加载中...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen flex items-center justify-center p-4">
+        <div className="text-center">
+          <AlertCircle className="w-12 h-12 text-red-500 mx-auto mb-3" />
+          <p className="text-gray-800 font-medium mb-2">加载失败</p>
+          <p className="text-gray-500 text-sm mb-4">{error}</p>
+          <button
+            onClick={() => window.location.reload()}
+            className="btn-primary text-sm"
+          >
+            重试
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen">
@@ -128,10 +182,10 @@ export default function Services() {
           ))}
         </div>
 
-        {mockServiceOrders.length > 0 && (
+        {orders.length > 0 && (
           <div className="mt-6 mb-8">
             <h3 className="font-semibold text-gray-800 mb-3">进行中的服务</h3>
-            {mockServiceOrders.map(order => (
+            {orders.map(order => (
               <div
                 key={order.id}
                 onClick={() => navigate(`/services/foster/${order.id}`)}

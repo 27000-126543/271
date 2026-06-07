@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Search, ShoppingCart, Filter } from 'lucide-react';
-import { mockProducts } from '@/data/mock';
+import { Search, ShoppingCart, Filter, Loader2, AlertCircle } from 'lucide-react';
+import { api } from '@/api/client';
+import type { Product } from '@/types';
 
 const categories = [
   { id: 'all', label: '全部' },
@@ -14,12 +15,60 @@ export default function Mall() {
   const navigate = useNavigate();
   const [activeCategory, setActiveCategory] = useState('all');
   const [searchText, setSearchText] = useState('');
+  const [products, setProducts] = useState<Product[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  const filteredProducts = mockProducts.filter(p => {
+  useEffect(() => {
+    const loadProducts = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+        const res = await api.mall.getProducts(activeCategory, searchText);
+        setProducts(res.products || res.data || []);
+      } catch (e: any) {
+        setError(e.message || '加载商品失败');
+      } finally {
+        setLoading(false);
+      }
+    };
+    loadProducts();
+  }, [activeCategory, searchText]);
+
+  const filteredProducts = products.filter(p => {
     if (activeCategory !== 'all' && p.category !== activeCategory) return false;
     if (searchText && !p.name.includes(searchText)) return false;
     return true;
   });
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="flex flex-col items-center gap-3">
+          <Loader2 className="w-8 h-8 text-primary-500 animate-spin" />
+          <p className="text-gray-500 text-sm">加载中...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen flex items-center justify-center p-4">
+        <div className="text-center">
+          <AlertCircle className="w-12 h-12 text-red-500 mx-auto mb-3" />
+          <p className="text-gray-800 font-medium mb-2">加载失败</p>
+          <p className="text-gray-500 text-sm mb-4">{error}</p>
+          <button
+            onClick={() => window.location.reload()}
+            className="btn-primary text-sm"
+          >
+            重试
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen">
